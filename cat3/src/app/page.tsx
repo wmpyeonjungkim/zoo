@@ -779,7 +779,7 @@ function Block({
   size: number
   selected: boolean
   hint: boolean
-  onPointerDown: () => void
+  onPointerDown: (e: React.PointerEvent) => void
   onPointerEnter: () => void
 }) {
   return (
@@ -838,6 +838,7 @@ export default function CatPuzzleGame() {
   const [comboEffects, setComboEffects] = useState<ComboEffect[]>([])
   const [shakeCell, setShakeCell] = useState<[number, number] | null>(null)
   const [dragStart, setDragStart] = useState<[number, number] | null>(null)
+  const [dragVisual, setDragVisual] = useState<{ row: number; col: number; x: number; y: number } | null>(null)
   const [gamePhase, setGamePhase] = useState<'playing' | 'checking' | 'over' | 'clear'>('playing')
   const [resultData, setResultData] = useState<{ cleared: boolean; canEarned: number; score: number; maxCombo: number } | null>(null)
   const [goalPopupShown, setGoalPopupShown] = useState(false)
@@ -1057,20 +1058,24 @@ export default function CatPuzzleGame() {
   }, [cansGiven, maxCombo, selectedStage, selectedCat, startGame])
 
   // ── pointer handling ──
-  const handlePointerDown = (r: number, c: number) => {
+  const handlePointerDown = (r: number, c: number, e: React.PointerEvent) => {
     if (isAnimating || gamePhase !== 'playing') return
     if (!selectedCell) {
       setSelectedCell([r, c])
       setDragStart([r, c])
+      setDragVisual({ row: r, col: c, x: e.clientX, y: e.clientY })
     } else {
       const [sr, sc] = selectedCell
       if (sr === r && sc === c) {
         setSelectedCell(null)
+        setDragVisual(null)
       } else if (Math.abs(sr - r) + Math.abs(sc - c) === 1) {
         trySwap(sr, sc, r, c)
+        setDragVisual(null)
       } else {
         setSelectedCell([r, c])
         setDragStart([r, c])
+        setDragVisual({ row: r, col: c, x: e.clientX, y: e.clientY })
       }
     }
   }
@@ -1436,6 +1441,30 @@ export default function CatPuzzleGame() {
           </div>
         </div>
 
+        {/* ── DRAG GHOST ── */}
+        {dragVisual && board[dragVisual.row]?.[dragVisual.col] && (
+          <div style={{
+            position: 'fixed',
+            left: dragVisual.x,
+            top: dragVisual.y,
+            width: cellSize - 4,
+            height: cellSize - 4,
+            transform: 'translate(-50%, -50%) scale(1.18)',
+            zIndex: 1000,
+            pointerEvents: 'none',
+            filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.35))',
+          }}>
+            <Block
+              cell={board[dragVisual.row][dragVisual.col]!}
+              size={cellSize - 4}
+              selected={false}
+              hint={false}
+              onPointerDown={(_e) => {}}
+              onPointerEnter={() => {}}
+            />
+          </div>
+        )}
+
         {/* ── BOARD ── */}
         <div
           ref={boardRef}
@@ -1448,15 +1477,25 @@ export default function CatPuzzleGame() {
             onTouchMove={(e) => {
               if (!dragStart || isAnimating || gamePhase !== 'playing') return
               const touch = e.touches[0]
-              const el = document.elementFromPoint(touch.clientX, touch.clientY)
-              if (!el) return
-              const cellEl = el.closest('[data-row]') as HTMLElement | null
-              if (!cellEl) return
-              const row = parseInt(cellEl.dataset.row!)
-              const col = parseInt(cellEl.dataset.col!)
-              if (!isNaN(row) && !isNaN(col)) handlePointerEnter(row, col)
+              setDragVisual(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null)
             }}
-            onTouchEnd={() => setDragStart(null)}
+            onTouchEnd={(e) => {
+              if (dragStart) {
+                const touch = e.changedTouches[0]
+                const el = document.elementFromPoint(touch.clientX, touch.clientY)
+                const cellEl = el?.closest('[data-row]') as HTMLElement | null
+                if (cellEl) {
+                  const tr = parseInt(cellEl.dataset.row!)
+                  const tc = parseInt(cellEl.dataset.col!)
+                  const [dr, dc] = dragStart
+                  if (!isNaN(tr) && !isNaN(tc) && Math.abs(dr - tr) + Math.abs(dc - tc) === 1) {
+                    trySwap(dr, dc, tr, tc)
+                  }
+                }
+              }
+              setDragStart(null)
+              setDragVisual(null)
+            }}
           >
             {/* board bg */}
             <div
@@ -1478,7 +1517,11 @@ export default function CatPuzzleGame() {
                       <div
                         key={cell.id}
                         className={`p-0.5 ${isShaking ? 'animate-shake' : ''}`}
-                        style={{ width: cellSize, height: cellSize }}
+                        style={{
+                          width: cellSize, height: cellSize,
+                          opacity: dragVisual?.row === r && dragVisual?.col === c ? 0.25 : 1,
+                          transition: 'opacity 0.1s',
+                        }}
                         data-row={r}
                         data-col={c}
                       >
@@ -1487,7 +1530,7 @@ export default function CatPuzzleGame() {
                           size={cellSize - 4}
                           selected={isSelected}
                           hint={false}
-                          onPointerDown={() => handlePointerDown(r, c)}
+                          onPointerDown={(e) => handlePointerDown(r, c, e)}
                           onPointerEnter={() => handlePointerEnter(r, c)}
                         />
                       </div>
