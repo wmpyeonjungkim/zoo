@@ -838,6 +838,7 @@ export default function CatPuzzleGame() {
   const [comboEffects, setComboEffects] = useState<ComboEffect[]>([])
   const [shakeCell, setShakeCell] = useState<[number, number] | null>(null)
   const [dragStart, setDragStart] = useState<[number, number] | null>(null)
+  const dragStartRef = useRef<[number, number] | null>(null)
   const [dragVisual, setDragVisual] = useState<{ row: number; col: number; x: number; y: number } | null>(null)
   const [gamePhase, setGamePhase] = useState<'playing' | 'checking' | 'over' | 'clear'>('playing')
   const [resultData, setResultData] = useState<{ cleared: boolean; canEarned: number; score: number; maxCombo: number } | null>(null)
@@ -1059,6 +1060,7 @@ export default function CatPuzzleGame() {
 
   // ── pointer handling ──
   const handlePointerDown = (r: number, c: number, e: React.PointerEvent) => {
+    if (e.pointerType === 'touch') return // touch handled by onTouchStart on board
     if (isAnimating || gamePhase !== 'playing') return
     if (!selectedCell) {
       setSelectedCell([r, c])
@@ -1474,25 +1476,41 @@ export default function CatPuzzleGame() {
           <div
             className="relative"
             style={{ width: cellSize * gridSize + 4, height: cellSize * gridSize + 4, touchAction: 'none' }}
+            onTouchStart={(e) => {
+              if (isAnimating || gamePhase !== 'playing') return
+              const touch = e.touches[0]
+              const el = document.elementFromPoint(touch.clientX, touch.clientY)
+              const cellEl = el?.closest('[data-row]') as HTMLElement | null
+              if (cellEl) {
+                const r = parseInt(cellEl.dataset.row!)
+                const c = parseInt(cellEl.dataset.col!)
+                if (!isNaN(r) && !isNaN(c)) {
+                  dragStartRef.current = [r, c]
+                  setDragVisual({ row: r, col: c, x: touch.clientX, y: touch.clientY })
+                }
+              }
+            }}
             onTouchMove={(e) => {
-              if (!dragStart || isAnimating || gamePhase !== 'playing') return
+              if (!dragStartRef.current || isAnimating || gamePhase !== 'playing') return
               const touch = e.touches[0]
               setDragVisual(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null)
             }}
             onTouchEnd={(e) => {
-              if (dragStart) {
+              const start = dragStartRef.current
+              if (start) {
                 const touch = e.changedTouches[0]
                 const el = document.elementFromPoint(touch.clientX, touch.clientY)
                 const cellEl = el?.closest('[data-row]') as HTMLElement | null
                 if (cellEl) {
                   const tr = parseInt(cellEl.dataset.row!)
                   const tc = parseInt(cellEl.dataset.col!)
-                  const [dr, dc] = dragStart
+                  const [dr, dc] = start
                   if (!isNaN(tr) && !isNaN(tc) && Math.abs(dr - tr) + Math.abs(dc - tc) === 1) {
                     trySwap(dr, dc, tr, tc)
                   }
                 }
               }
+              dragStartRef.current = null
               setDragStart(null)
               setDragVisual(null)
             }}
