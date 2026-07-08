@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "build": "cd cat3 && npm install && npm run build"
+  }
+}
