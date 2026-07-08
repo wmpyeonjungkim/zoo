@@ -1444,7 +1444,19 @@ export default function CatPuzzleGame() {
         >
           <div
             className="relative"
-            style={{ width: cellSize * gridSize + 4, height: cellSize * gridSize + 4 }}
+            style={{ width: cellSize * gridSize + 4, height: cellSize * gridSize + 4, touchAction: 'none' }}
+            onTouchMove={(e) => {
+              if (!dragStart || isAnimating || gamePhase !== 'playing') return
+              const touch = e.touches[0]
+              const el = document.elementFromPoint(touch.clientX, touch.clientY)
+              if (!el) return
+              const cellEl = el.closest('[data-row]') as HTMLElement | null
+              if (!cellEl) return
+              const row = parseInt(cellEl.dataset.row!)
+              const col = parseInt(cellEl.dataset.col!)
+              if (!isNaN(row) && !isNaN(col)) handlePointerEnter(row, col)
+            }}
+            onTouchEnd={() => setDragStart(null)}
           >
             {/* board bg */}
             <div
@@ -1467,6 +1479,8 @@ export default function CatPuzzleGame() {
                         key={cell.id}
                         className={`p-0.5 ${isShaking ? 'animate-shake' : ''}`}
                         style={{ width: cellSize, height: cellSize }}
+                        data-row={r}
+                        data-col={c}
                       >
                         <Block
                           cell={cell}
